@@ -2,14 +2,16 @@ package de.danoeh.antennapod.core.asynctask;
 
 import android.content.Context;
 import android.util.Log;
-import de.danoeh.antennapod.core.BuildConfig;
-import de.danoeh.antennapod.core.storage.DBWriter;
-import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
+
 import org.shredzone.flattr4j.exception.FlattrException;
 import org.shredzone.flattr4j.model.Flattr;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+
+import de.danoeh.antennapod.core.BuildConfig;
+import de.danoeh.antennapod.core.storage.DBWriter;
+import de.danoeh.antennapod.core.util.flattr.FlattrUtils;
 
 /**
  * Fetch list of flattred things and flattr status in database in a background thread.
@@ -32,13 +34,11 @@ public class FlattrStatusFetcher extends Thread {
 
         try {
             List<Flattr> flattredThings = FlattrUtils.retrieveFlattredThings();
-            DBWriter.setFlattredStatus(context, flattredThings).get();
+            DBWriter.setFlattredStatus(flattredThings).get();
         } catch (FlattrException e) {
             e.printStackTrace();
             Log.d(TAG, "flattrQueue exception retrieving list with flattred items " + e.getMessage());
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (ExecutionException e) {
+        } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }
 

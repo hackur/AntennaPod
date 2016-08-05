@@ -1,6 +1,6 @@
 package de.danoeh.antennapod.core.gpoddernet.model;
 
-import org.apache.commons.lang3.Validate;
+import android.support.annotation.NonNull;
 
 public class GpodnetDevice {
 
@@ -9,10 +9,10 @@ public class GpodnetDevice {
     private DeviceType type;
     private int subscriptions;
 
-    public GpodnetDevice(String id, String caption, String type,
+    public GpodnetDevice(@NonNull String id,
+                         String caption,
+                         String type,
                          int subscriptions) {
-        Validate.notNull(id);
-
         this.id = id;
         this.caption = caption;
         this.type = DeviceType.fromString(type);
@@ -25,7 +25,7 @@ public class GpodnetDevice {
                 + type + ", subscriptions=" + subscriptions + "]";
     }
 
-    public static enum DeviceType {
+    public enum DeviceType {
         DESKTOP, LAPTOP, MOBILE, SERVER, OTHER;
 
         static DeviceType fromString(String s) {
@@ -33,16 +33,17 @@ public class GpodnetDevice {
                 return OTHER;
             }
 
-            if (s.equals("desktop")) {
-                return DESKTOP;
-            } else if (s.equals("laptop")) {
-                return LAPTOP;
-            } else if (s.equals("mobile")) {
-                return MOBILE;
-            } else if (s.equals("server")) {
-                return SERVER;
-            } else {
-                return OTHER;
+            switch (s) {
+                case "desktop":
+                    return DESKTOP;
+                case "laptop":
+                    return LAPTOP;
+                case "mobile":
+                    return MOBILE;
+                case "server":
+                    return SERVER;
+                default:
+                    return OTHER;
             }
         }
 

@@ -1,18 +1,19 @@
 package de.danoeh.antennapod.core.util;
 
-import de.danoeh.antennapod.core.feed.FeedItem;
-
 import java.util.ArrayList;
 import java.util.List;
 
+import de.danoeh.antennapod.core.feed.FeedItem;
+
 public class EpisodeFilter {
+
 	private EpisodeFilter() {
 
 	}
 
 	/** Return a copy of the itemlist without items which have no media. */
 	public static ArrayList<FeedItem> getEpisodeList(List<FeedItem> items) {
-		ArrayList<FeedItem> episodes = new ArrayList<FeedItem>(items);
+		ArrayList<FeedItem> episodes = new ArrayList<>(items);
 		for (FeedItem item : items) {
 			if (item.getMedia() == null) {
 				episodes.remove(item);

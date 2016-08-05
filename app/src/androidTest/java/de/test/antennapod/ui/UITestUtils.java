@@ -4,13 +4,10 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.util.Log;
 
-import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.core.feed.*;
-import de.danoeh.antennapod.core.storage.PodDBAdapter;
-import de.test.antennapod.util.service.download.HTTPBin;
-import de.test.antennapod.util.syndication.feedgenerator.RSS2Generator;
 import junit.framework.Assert;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -23,6 +20,21 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.activity.MainActivity;
+import de.danoeh.antennapod.core.feed.EventDistributor;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedImage;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
+import de.danoeh.antennapod.core.event.QueueEvent;
+import de.danoeh.antennapod.core.storage.PodDBAdapter;
+import de.danoeh.antennapod.core.util.playback.PlaybackController;
+import de.danoeh.antennapod.fragment.ExternalPlayerFragment;
+import de.greenrobot.event.EventBus;
+import de.test.antennapod.util.service.download.HTTPBin;
+import de.test.antennapod.util.syndication.feedgenerator.RSS2Generator;
+
 /**
  * Utility methods for UI tests.
  * Starts a web server that hosts feeds, episodes and images.
@@ -30,12 +42,15 @@ import java.util.List;
 @TargetApi(Build.VERSION_CODES.HONEYCOMB)
 public class UITestUtils {
 
+    private static final String TAG = UITestUtils.class.getSimpleName();
+
     private static final String DATA_FOLDER = "test/UITestUtils";
 
     public static final int NUM_FEEDS = 5;
     public static final int NUM_ITEMS_PER_FEED = 10;
 
     public static final int HOME_VIEW = (Build.VERSION.SDK_INT >= 11) ? android.R.id.home : R.id.home;
+    public static final String TEST_FILE_NAME = "3sec.mp3";
 
 
     private Context context;
@@ -44,7 +59,7 @@ public class UITestUtils {
     private File hostedFeedDir;
     private File hostedMediaDir;
 
-    public List<Feed> hostedFeeds = new ArrayList<Feed>();
+    public List<Feed> hostedFeeds = new ArrayList<>();
 
     public UITestUtils(Context context) {
         this.context = context;
@@ -71,7 +86,7 @@ public class UITestUtils {
         server.stop();
 
         if (localFeedDataAdded) {
-            PodDBAdapter.deleteDatabase(context);
+            PodDBAdapter.deleteDatabase();
         }
     }
 
@@ -103,9 +118,12 @@ public class UITestUtils {
 
     private File newMediaFile(String name) throws IOException {
         File mediaFile = new File(hostedMediaDir, name);
+        if(mediaFile.exists()) {
+            mediaFile.delete();
+        }
         Assert.assertFalse(mediaFile.exists());
 
-        InputStream in = context.getAssets().open("testfile.mp3");
+        InputStream in = context.getAssets().open(TEST_FILE_NAME);
         Assert.assertNotNull(in);
 
         FileOutputStream out = new FileOutputStream(mediaFile);
@@ -125,19 +143,20 @@ public class UITestUtils {
         for (int i = 0; i < NUM_FEEDS; i++) {
             File bitmapFile = newBitmapFile("image" + i);
             FeedImage image = new FeedImage(0, "image " + i, null, hostFile(bitmapFile), false);
-            Feed feed = new Feed(0, new Date(), "Title " + i, "http://example.com/" + i, "Description of feed " + i,
+            Feed feed = new Feed(0, null, "Title " + i, "http://example.com/" + i, "Description of feed " + i,
                     "http://example.com/pay/feed" + i, "author " + i, "en", Feed.TYPE_RSS2, "feed" + i, image, null,
                     "http://example.com/feed/src/" + i, false);
             image.setOwner(feed);
 
             // create items
-            List<FeedItem> items = new ArrayList<FeedItem>();
+            List<FeedItem> items = new ArrayList<>();
             for (int j = 0; j < NUM_ITEMS_PER_FEED; j++) {
-                FeedItem item = new FeedItem(0, "item" + j, "item" + j, "http://example.com/feed" + i + "/item/" + j, new Date(), true, feed);
+                FeedItem item = new FeedItem(j, "Feed " + (i+1) + ": Item " + (j+1), "item" + j,
+                        "http://example.com/feed" + i + "/item/" + j, new Date(), FeedItem.UNPLAYED, feed);
                 items.add(item);
 
                 File mediaFile = newMediaFile("feed-" + i + "-episode-" + j + ".mp3");
-                item.setMedia(new FeedMedia(0, item, 0, 0, mediaFile.length(), "audio/mp3", null, hostFile(mediaFile), false, null, 0));
+                item.setMedia(new FeedMedia(j, item, 0, 0, mediaFile.length(), "audio/mp3", null, hostFile(mediaFile), false, null, 0, 0));
 
             }
             feed.setItems(items);
@@ -161,20 +180,22 @@ public class UITestUtils {
      * @param downloadEpisodes true if episodes should also be marked as downloaded.
      */
     public void addLocalFeedData(boolean downloadEpisodes) throws Exception {
-        if (localFeedDataAdded) throw new IllegalStateException("addLocalFeedData was called twice on the same instance");
+        if (localFeedDataAdded) {
+            Log.w(TAG, "addLocalFeedData was called twice on the same instance");
+            // might be a flaky test, this is actually not that severe
+            return;
+        }
         if (!feedDataHosted) {
             addHostedFeedData();
         }
 
-        List<FeedItem> queue = new ArrayList<FeedItem>();
-
-        PodDBAdapter adapter = new PodDBAdapter(context);
-        adapter.open();
+        List<FeedItem> queue = new ArrayList<>();
         for (Feed feed : hostedFeeds) {
             feed.setDownloaded(true);
             if (feed.getImage() != null) {
                 FeedImage image = feed.getImage();
-                image.setFile_url(image.getDownload_url());
+                int fileId = Integer.parseInt(StringUtils.substringAfter(image.getDownload_url(), "files/"));
+                image.setFile_url(server.accessFile(fileId).getAbsolutePath());
                 image.setDownloaded(true);
             }
             if (downloadEpisodes) {
@@ -191,10 +212,23 @@ public class UITestUtils {
             queue.add(feed.getItems().get(0));
             feed.getItems().get(1).getMedia().setPlaybackCompletionDate(new Date());
         }
+        localFeedDataAdded = true;
+
+        PodDBAdapter adapter = PodDBAdapter.getInstance();
+        adapter.open();
         adapter.setCompleteFeed(hostedFeeds.toArray(new Feed[hostedFeeds.size()]));
         adapter.setQueue(queue);
         adapter.close();
         EventDistributor.getInstance().sendFeedUpdateBroadcast();
-        EventDistributor.getInstance().sendQueueUpdateBroadcast();
+        EventBus.getDefault().post(QueueEvent.setQueue(queue));
+    }
+
+    public PlaybackController getPlaybackController(MainActivity mainActivity) {
+        ExternalPlayerFragment fragment = (ExternalPlayerFragment)mainActivity.getSupportFragmentManager().findFragmentByTag(ExternalPlayerFragment.TAG);
+        return fragment.getPlaybackControllerTestingOnly();
+    }
+
+    public FeedMedia getCurrentMedia(MainActivity mainActivity) {
+        return (FeedMedia)getPlaybackController(mainActivity).getMedia();
     }
 }

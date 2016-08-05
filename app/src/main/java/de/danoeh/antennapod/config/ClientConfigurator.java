@@ -8,13 +8,14 @@ import de.danoeh.antennapod.core.ClientConfig;
  */
 public class ClientConfigurator {
 
+    private ClientConfigurator(){}
+
     static {
         ClientConfig.USER_AGENT = "AntennaPod/" + BuildConfig.VERSION_NAME;
         ClientConfig.applicationCallbacks = new ApplicationCallbacksImpl();
         ClientConfig.downloadServiceCallbacks = new DownloadServiceCallbacksImpl();
         ClientConfig.gpodnetCallbacks = new GpodnetCallbacksImpl();
         ClientConfig.playbackServiceCallbacks = new PlaybackServiceCallbacksImpl();
-        ClientConfig.storageCallbacks = new StorageCallbacksImpl();
         ClientConfig.flattrCallbacks = new FlattrCallbacksImpl();
         ClientConfig.dbTasksCallbacks = new DBTasksCallbacksImpl();
     }

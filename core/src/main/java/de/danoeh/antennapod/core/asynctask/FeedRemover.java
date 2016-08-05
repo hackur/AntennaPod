@@ -3,20 +3,22 @@ package de.danoeh.antennapod.core.asynctask;
 import android.annotation.SuppressLint;
 import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.DialogInterface.OnCancelListener;
+import android.content.Intent;
 import android.os.AsyncTask;
-import de.danoeh.antennapod.core.R;
-import de.danoeh.antennapod.core.feed.Feed;
-import de.danoeh.antennapod.core.storage.DBWriter;
 
 import java.util.concurrent.ExecutionException;
+
+import de.danoeh.antennapod.core.R;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.service.playback.PlaybackService;
+import de.danoeh.antennapod.core.storage.DBWriter;
 
 /** Removes a feed in the background. */
 public class FeedRemover extends AsyncTask<Void, Void, Void> {
 	Context context;
 	ProgressDialog dialog;
 	Feed feed;
+	public boolean skipOnCompletion = false;
 
 	public FeedRemover(Context context, Feed feed) {
 		super();
@@ -28,37 +30,27 @@ public class FeedRemover extends AsyncTask<Void, Void, Void> {
 	protected Void doInBackground(Void... params) {
         try {
             DBWriter.deleteFeed(context, feed.getId()).get();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (ExecutionException e) {
+        } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }
         return null;
 	}
-
-	@Override
-	protected void onCancelled() {
-		dialog.dismiss();
-	}
-
+	
 	@Override
 	protected void onPostExecute(Void result) {
 		dialog.dismiss();
+		if(skipOnCompletion) {
+			context.sendBroadcast(new Intent(
+					PlaybackService.ACTION_SKIP_CURRENT_EPISODE));
+		}
 	}
 
 	@Override
 	protected void onPreExecute() {
 		dialog = new ProgressDialog(context);
 		dialog.setMessage(context.getString(R.string.feed_remover_msg));
-		dialog.setOnCancelListener(new OnCancelListener() {
-
-			@Override
-			public void onCancel(DialogInterface dialog) {
-				cancel(true);
-
-			}
-
-		});
+		dialog.setIndeterminate(true);
+		dialog.setCancelable(false);
 		dialog.show();
 	}
 

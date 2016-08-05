@@ -6,17 +6,18 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.os.AsyncTask;
+import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.widget.Toast;
 
-import org.apache.commons.lang3.Validate;
 import org.shredzone.flattr4j.exception.FlattrException;
 
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import de.danoeh.antennapod.core.BuildConfig;
 import de.danoeh.antennapod.core.ClientConfig;
@@ -44,10 +45,10 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
 
     private final Context context;
 
-    public static enum ExitCode {EXIT_NORMAL, NO_TOKEN, NO_NETWORK, NO_THINGS}
+    public enum ExitCode {EXIT_NORMAL, NO_TOKEN, NO_NETWORK, NO_THINGS}
 
-    private volatile int countFailed = 0;
-    private volatile int countSuccess = 0;
+    private final AtomicInteger countFailed = new AtomicInteger();
+    private final AtomicInteger countSuccess = new AtomicInteger();
 
     private volatile FlattrThing extraFlattrThing;
 
@@ -63,8 +64,7 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
      *
      * @param context A context for accessing the database and posting notifications. Must not be null.
      */
-    public FlattrClickWorker(Context context) {
-        Validate.notNull(context);
+    public FlattrClickWorker(@NonNull Context context) {
         this.context = context.getApplicationContext();
     }
 
@@ -90,11 +90,11 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
             return ExitCode.NO_TOKEN;
         }
 
-        if (!NetworkUtils.networkAvailable(context)) {
+        if (!NetworkUtils.networkAvailable()) {
             return ExitCode.NO_NETWORK;
         }
 
-        final List<FlattrThing> flattrQueue = DBReader.getFlattrQueue(context);
+        final List<FlattrThing> flattrQueue = DBReader.getFlattrQueue();
         if (extraFlattrThing != null) {
             flattrQueue.add(extraFlattrThing);
         } else if (flattrQueue.size() == 1) {
@@ -106,7 +106,7 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
             return ExitCode.NO_THINGS;
         }
 
-        List<Future> dbFutures = new LinkedList<Future>();
+        List<Future> dbFutures = new LinkedList<>();
         for (FlattrThing thing : flattrQueue) {
             if (BuildConfig.DEBUG) Log.d(TAG, "Processing " + thing.getTitle());
 
@@ -115,12 +115,12 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
                 FlattrUtils.clickUrl(context, thing.getPaymentLink());
                 thing.getFlattrStatus().setFlattred();
                 publishProgress(R.string.flattr_click_success);
-                countSuccess++;
+                countSuccess.incrementAndGet();
 
             } catch (FlattrException e) {
                 e.printStackTrace();
-                countFailed++;
-                if (countFailed == 1) {
+                int failed = countFailed.incrementAndGet();
+                if (failed == 1) {
                     exception = e;
                 }
             }
@@ -134,9 +134,7 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
         for (Future f : dbFutures) {
             try {
                 f.get();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
+            } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
         }
@@ -149,7 +147,7 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
         super.onPostExecute(exitCode);
         switch (exitCode) {
             case EXIT_NORMAL:
-                if (countFailed > 0) {
+                if (countFailed.get() > 0) {
                     postFlattrFailedNotification();
                 }
                 break;
@@ -191,7 +189,8 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
     }
 
     private void postFlattrFailedNotification() {
-        if (countFailed == 0) {
+        int failed = countFailed.get();
+        if (failed == 0) {
             return;
         }
 
@@ -199,15 +198,15 @@ public class FlattrClickWorker extends AsyncTask<Void, Integer, FlattrClickWorke
         String title;
         String subtext;
 
-        if (countFailed == 1) {
+        if (failed == 1) {
             title = context.getString(R.string.flattrd_failed_label);
             String exceptionMsg = (exception.getMessage() != null) ? exception.getMessage() : "";
             subtext = context.getString(R.string.flattr_click_failure, extraFlattrThing.getTitle())
                     + "\n" + exceptionMsg;
         } else {
             title = context.getString(R.string.flattrd_label);
-            subtext = context.getString(R.string.flattr_click_success_count, countSuccess) + "\n"
-                    + context.getString(R.string.flattr_click_failure_count, countFailed);
+            subtext = context.getString(R.string.flattr_click_success_count, countSuccess.get()) + "\n"
+                    + context.getString(R.string.flattr_click_failure_count, failed);
         }
 
         Notification notification = new NotificationCompat.Builder(context)

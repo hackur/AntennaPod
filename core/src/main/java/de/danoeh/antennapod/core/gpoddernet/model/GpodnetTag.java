@@ -1,46 +1,66 @@
 package de.danoeh.antennapod.core.gpoddernet.model;
 
-import org.apache.commons.lang3.Validate;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.support.annotation.NonNull;
 
-import java.util.Comparator;
+public class GpodnetTag implements Parcelable  {
 
-public class GpodnetTag {
+    private final String title;
+    private final String tag;
+    private final int usage;
 
-    private String name;
-    private int usage;
-
-    public GpodnetTag(String name, int usage) {
-        Validate.notNull(name);
-
-        this.name = name;
+    public GpodnetTag(@NonNull String title, @NonNull String tag, int usage) {
+        this.title = title;
+        this.tag = tag;
         this.usage = usage;
     }
 
-    public GpodnetTag(String name) {
-        super();
-        this.name = name;
+    protected GpodnetTag(Parcel in) {
+        title = in.readString();
+        tag = in.readString();
+        usage = in.readInt();
     }
 
     @Override
     public String toString() {
-        return "GpodnetTag [name=" + name + ", usage=" + usage + "]";
+        return "GpodnetTag [title="+title+", tag=" + tag + ", usage=" + usage + "]";
     }
 
-    public String getName() {
-        return name;
+    public String getTitle() {
+        return title;
+    }
+
+    public String getTag() {
+        return tag;
     }
 
     public int getUsage() {
         return usage;
     }
 
-    public static class UsageComparator implements Comparator<GpodnetTag> {
+    @Override
+    public int describeContents() {
+        return 0;
+    }
 
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(title);
+        dest.writeString(tag);
+        dest.writeInt(usage);
+    }
+
+    public static final Creator<GpodnetTag> CREATOR = new Creator<GpodnetTag>() {
         @Override
-        public int compare(GpodnetTag o1, GpodnetTag o2) {
-            return o1.usage - o2.usage;
+        public GpodnetTag createFromParcel(Parcel in) {
+            return new GpodnetTag(in);
         }
 
-    }
+        @Override
+        public GpodnetTag[] newArray(int size) {
+            return new GpodnetTag[size];
+        }
+    };
 
 }
